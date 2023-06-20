@@ -32,6 +32,7 @@ import (
 
 	"github.com/tektoncd/pipeline/pkg/entrypoint"
 	"github.com/tektoncd/pipeline/pkg/pod"
+	"github.com/testifysec/go-witness/log"
 )
 
 const ENABLE_WITNESS = true
@@ -85,10 +86,13 @@ func (rr *realRunner) Run(ctx context.Context, args ...string) error {
 	defer signal.Reset()
 
 	if ENABLE_WITNESS {
+		log.SetLogger(StdoutStderrLogger{})
+
 		err := withWitness(ctx, append([]string{name}, args...))
 		if err != nil {
 			return err
 		}
+
 	} else {
 		cmd := exec.CommandContext(ctx, name, args...)
 

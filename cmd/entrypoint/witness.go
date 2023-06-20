@@ -83,3 +83,39 @@ func withWitness(ctx context.Context, args []string) error {
 
 	return nil
 }
+
+//Witness Logger
+
+type StdoutStderrLogger struct{}
+
+func (l StdoutStderrLogger) Errorf(format string, args ...interface{}) {
+	fmt.Fprintf(os.Stderr, format+"\n", args...)
+}
+
+func (l StdoutStderrLogger) Error(args ...interface{}) {
+	fmt.Fprintln(os.Stderr, args...)
+}
+
+func (l StdoutStderrLogger) Warnf(format string, args ...interface{}) {
+	fmt.Fprintf(os.Stdout, format+"\n", args...)
+}
+
+func (l StdoutStderrLogger) Warn(args ...interface{}) {
+	fmt.Fprintln(os.Stdout, args...)
+}
+
+func (l StdoutStderrLogger) Debugf(format string, args ...interface{}) {
+	fmt.Fprintf(os.Stdout, format+"\n", args...)
+}
+
+func (l StdoutStderrLogger) Debug(args ...interface{}) {
+	fmt.Fprintln(os.Stdout, args...)
+}
+
+func (l StdoutStderrLogger) Infof(format string, args ...interface{}) {
+	fmt.Fprintf(os.Stdout, format+"\n", args...)
+}
+
+func (l StdoutStderrLogger) Info(args ...interface{}) {
+	fmt.Fprintln(os.Stdout, args...)
+}
