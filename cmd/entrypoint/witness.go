@@ -2,13 +2,19 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"os"
+	"strings"
 
+	"github.com/google/shlex"
 	"github.com/testifysec/go-witness"
 	"github.com/testifysec/go-witness/archivista"
 	"github.com/testifysec/go-witness/attestation"
 	"github.com/testifysec/go-witness/attestation/commandrun"
+	"github.com/testifysec/go-witness/attestation/environment"
+	"github.com/testifysec/go-witness/attestation/git"
 	"github.com/testifysec/go-witness/attestation/material"
 	"github.com/testifysec/go-witness/attestation/product"
 	"github.com/testifysec/go-witness/cryptoutil"
@@ -18,16 +24,33 @@ import (
 	"github.com/testifysec/go-witness/timestamp"
 )
 
-var FULCIO_URL = "https://v1.fulcio.sigstore.dev"
-var FULCIO_OIDC_ISSUER = "https://oauth2.sigstore.dev/auth"
-var FULCIO_OIDC_CLIENT_ID = "sigstore"
-
-const TIMESTAMP_URL = "https://freetsa.org/tsr"
-const ENABLE_TRACING = false
-const ARCHIVISTA_URL = "https://archivista.testifysec.io"
-const STEP_ENV = "TEKTON_RESOURCE_NAME"
+const (
+	DEFAULT_FULCIO_URL            = "https://v1.fulcio.sigstore.dev"
+	DEFAULT_FULCIO_OIDC_ISSUER    = "https://oauth2.sigstore.dev/auth"
+	DEFAULT_FULCIO_OIDC_CLIENT_ID = "sigstore"
+	DEFAULT_TIMESTAMP_URL         = "https://freetsa.org/tsr"
+	DEFAULT_ARCHIVISTA_URL        = "https://archivista.testifysec.io"
+	DEFAULT_STEP_ENV              = "TEKTON_RESOURCE_NAME"
+	DEFAULT_ENABLE_TRACING        = false
+	DEFAULT_OUTFILE               = ""
+	DEFAULT_ATTESTORS             = "environment,git"
+)
 
 func loadFulcioSigner(ctx context.Context) (cryptoutil.Signer, error) {
+	FULCIO_URL := DEFAULT_FULCIO_URL
+	if val, exists := os.LookupEnv("FULCIO_URL"); exists {
+		FULCIO_URL = val
+	}
+
+	FULCIO_OIDC_ISSUER := DEFAULT_FULCIO_OIDC_ISSUER
+	if val, exists := os.LookupEnv("FULCIO_OIDC_ISSUER"); exists {
+		FULCIO_OIDC_ISSUER = val
+	}
+
+	FULCIO_OIDC_CLIENT_ID := DEFAULT_FULCIO_OIDC_CLIENT_ID
+	if val, exists := os.LookupEnv("FULCIO_OIDC_CLIENT_ID"); exists {
+		FULCIO_OIDC_CLIENT_ID = val
+	}
 
 	signer, err := fulcio.Signer(ctx, FULCIO_URL, FULCIO_OIDC_ISSUER, FULCIO_OIDC_CLIENT_ID, "")
 	if err != nil {
@@ -35,14 +58,38 @@ func loadFulcioSigner(ctx context.Context) (cryptoutil.Signer, error) {
 	}
 
 	return signer, nil
-
 }
 
 func withWitness(ctx context.Context, args []string) error {
+
 	signer, error := loadFulcioSigner(ctx)
 	if error != nil {
-
 		return fmt.Errorf("failed to load fulcio signer: %w", error)
+	}
+
+	TIMESTAMP_URL := DEFAULT_TIMESTAMP_URL
+	if val, exists := os.LookupEnv("TIMESTAMP_URL"); exists {
+		TIMESTAMP_URL = val
+	}
+
+	ARCHIVISTA_URL := DEFAULT_ARCHIVISTA_URL
+	if val, exists := os.LookupEnv("ARCHIVISTA_URL"); exists {
+		ARCHIVISTA_URL = val
+	}
+
+	STEP_ENV := DEFAULT_STEP_ENV
+	if val, exists := os.LookupEnv("STEP_ENV"); exists {
+		STEP_ENV = val
+	}
+
+	ATTESTORS := DEFAULT_ATTESTORS
+	if val, exists := os.LookupEnv("ATTESTORS"); exists {
+		ATTESTORS = val
+	}
+
+	OUT_FILE := DEFAULT_OUTFILE
+	if val, exists := os.LookupEnv("OUT_FILE"); exists {
+		OUT_FILE = val
 	}
 
 	timestampers := []dsse.Timestamper{}
@@ -50,9 +97,11 @@ func withWitness(ctx context.Context, args []string) error {
 		timestampers = append(timestampers, timestamp.NewTimestamper(timestamp.TimestampWithUrl(url)))
 	}
 
-	attestors := []attestation.Attestor{product.New(), material.New()}
-	if len(args) > 0 {
-		attestors = append(attestors, commandrun.New(commandrun.WithCommand(args), commandrun.WithTracing(ENABLE_TRACING)))
+	joinedArgs := strings.Join(args, " ")
+
+	attestors, err := getAttestorsFromEnv(ctx, joinedArgs, ATTESTORS)
+	if err != nil {
+		return fmt.Errorf("failed to get attestors: %w", err)
 	}
 
 	stepName := os.Getenv(STEP_ENV)
@@ -81,7 +130,53 @@ func withWitness(ctx context.Context, args []string) error {
 		log.Infof("Stored in archivist as %v\n", gitoid)
 	}
 
+	//write to file
+	signedBytes, err := json.Marshal(&result.SignedEnvelope)
+	if err != nil {
+		return fmt.Errorf("failed to marshal envelope: %w", err)
+	}
+
+	if OUT_FILE != "" {
+		if err := ioutil.WriteFile(OUT_FILE, signedBytes, 0644); err != nil {
+			return fmt.Errorf("failed to write to file: %w", err)
+		}
+	} else {
+		fmt.Println(string(signedBytes))
+	}
+
 	return nil
+}
+
+func getAttestorsFromEnv(ctx context.Context, args string, attestors string) ([]attestation.Attestor, error) {
+	attestorList := []attestation.Attestor{product.New(), material.New()}
+
+	parsedArgs, err := shlex.Split(args)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse args: %w", err)
+	}
+
+	ENABLE_TRACING := DEFAULT_ENABLE_TRACING
+	if val, exists := os.LookupEnv("ENABLE_TRACING"); exists {
+		if strings.ToLower(val) == "true" {
+			ENABLE_TRACING = true
+		}
+	}
+
+	if len(args) > 0 {
+		attestorList = append(attestorList, commandrun.New(commandrun.WithCommand(parsedArgs), commandrun.WithTracing(ENABLE_TRACING)))
+	}
+
+	for _, attestor := range strings.Split(attestors, ",") {
+		switch attestor {
+		case "environment":
+			attestorList = append(attestorList, environment.New())
+		case "git":
+			attestorList = append(attestorList, git.New())
+		default:
+			return nil, fmt.Errorf("unsupported attestor: %s", attestor)
+		}
+	}
+	return attestorList, nil
 }
 
 //Witness Logger
