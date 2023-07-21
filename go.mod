@@ -42,7 +42,6 @@ require github.com/benbjohnson/clock v1.1.0 // indirect
 
 require (
 	code.gitea.io/sdk/gitea v0.15.1
-	github.com/anmitsu/go-shlex v0.0.0-20200514113438-38f4b401e2be
 	github.com/goccy/kpoward v0.1.0
 	github.com/google/go-containerregistry/pkg/authn/k8schain v0.0.0-20221030203717-1711cefd7eec
 	github.com/sigstore/sigstore/pkg/signature/kms/aws v1.7.0

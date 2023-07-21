@@ -149,8 +149,6 @@ github.com/agnivade/levenshtein
 # github.com/ahmetb/gen-crd-api-reference-docs v0.3.1-0.20220720053627-e327d0730470 => github.com/tektoncd/ahmetb-gen-crd-api-reference-docs v0.3.1-0.20220729140133-6ce2d5aafcb4
 ## explicit; go 1.17
 github.com/ahmetb/gen-crd-api-reference-docs
-# github.com/anmitsu/go-shlex v0.0.0-20200514113438-38f4b401e2be
-## explicit; go 1.13
 # github.com/aws/aws-sdk-go v1.44.282
 ## explicit; go 1.11
 github.com/aws/aws-sdk-go/aws
