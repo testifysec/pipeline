@@ -10,7 +10,7 @@ on:
       branches:
         - '*'
 jobs:
-    build-docker-server:
+    build-entrypoint:
       runs-on: "ubuntu-22.04"
   
       steps:
@@ -43,11 +43,4 @@ jobs:
             step: "build"
             attestations: "git github oci"
             command: ko build --bare --tarball entrypoint.tar --sbom-dir . ./cmd/entrypoint
-  
-        - name: "Upload Server artifact"
-          uses: actions/upload-artifact@0b7f8abb1508181956e8e162db84b466c27e18ce # v3.1.2
-          with:
-            name: entrypoint
-            path: entrypoint.tar
-            retention-days: 5
   
