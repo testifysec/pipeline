@@ -2,14 +2,13 @@ permissions:
     id-token: write # This is required for requesting the JWT
     contents: read # This is required for actions/checkout
   
-  name: release
+name: release
   
-  on:
+on:
     push:
       branches:
         - cole/witness
-  
-  jobs:
+jobs:
     build-docker-server:
       runs-on: "ubuntu-22.04"
   
