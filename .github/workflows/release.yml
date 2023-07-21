@@ -8,7 +8,7 @@ name: release
 on:
     push:
       branches:
-        - '*''
+        - '*'
 jobs:
     build-docker-server:
       runs-on: "ubuntu-22.04"
