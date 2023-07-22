@@ -49,7 +49,7 @@ jobs:
         - name: Build Entrypoint
           uses: testifysec/witness-run-action@v0.1.3
           env:
-            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            GITHUB_TOKEN: ${{ secrets.AUTH_TOKEN }}
             GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
             KO_DOCKER_REPO: ghcr.io/github.com/testifysec/pipeline-entrypoint
           with:
