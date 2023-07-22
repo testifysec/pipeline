@@ -32,7 +32,10 @@ import (
 
 	"github.com/tektoncd/pipeline/pkg/entrypoint"
 	"github.com/tektoncd/pipeline/pkg/pod"
+	"github.com/testifysec/go-witness/log"
 )
+
+const ENABLE_WITNESS = true
 
 // TODO(jasonhall): Test that original exit code is propagated and that
 // stdout/stderr are collected -- needs e2e tests.
@@ -82,63 +85,73 @@ func (rr *realRunner) Run(ctx context.Context, args ...string) error {
 	signal.Notify(rr.signals)
 	defer signal.Reset()
 
-	cmd := exec.CommandContext(ctx, name, args...)
+	if ENABLE_WITNESS {
+		log.SetLogger(StdoutStderrLogger{})
 
-	// if a standard output file is specified
-	// create the log file and add to the std multi writer
-	if rr.stdoutPath != "" {
-		stdout, err := newStdLogWriter(rr.stdoutPath)
+		err := withWitness(ctx, append([]string{name}, args...))
 		if err != nil {
 			return err
 		}
-		defer stdout.Close()
-		cmd.Stdout = io.MultiWriter(os.Stdout, stdout)
+
 	} else {
-		cmd.Stdout = os.Stdout
-	}
-	if rr.stderrPath != "" {
-		stderr, err := newStdLogWriter(rr.stderrPath)
-		if err != nil {
-			return err
-		}
-		defer stderr.Close()
-		cmd.Stderr = io.MultiWriter(os.Stderr, stderr)
-	} else {
-		cmd.Stderr = os.Stderr
-	}
+		cmd := exec.CommandContext(ctx, name, args...)
 
-	// dedicated PID group used to forward signals to
-	// main process and all children
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-
-	if os.Getenv("TEKTON_RESOURCE_NAME") == "" && os.Getenv(pod.TektonHermeticEnvVar) == "1" {
-		dropNetworking(cmd)
-	}
-
-	// Start defined command
-	if err := cmd.Start(); err != nil {
-		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-			return context.DeadlineExceeded
-		}
-		return err
-	}
-
-	// Goroutine for signals forwarding
-	go func() {
-		for s := range rr.signals {
-			// Forward signal to main process and all children
-			if s != syscall.SIGCHLD {
-				_ = syscall.Kill(-cmd.Process.Pid, s.(syscall.Signal))
+		// if a standard output file is specified
+		// create the log file and add to the std multi writer
+		if rr.stdoutPath != "" {
+			stdout, err := newStdLogWriter(rr.stdoutPath)
+			if err != nil {
+				return err
 			}
+			defer stdout.Close()
+			cmd.Stdout = io.MultiWriter(os.Stdout, stdout)
+		} else {
+			cmd.Stdout = os.Stdout
 		}
-	}()
+		if rr.stderrPath != "" {
+			stderr, err := newStdLogWriter(rr.stderrPath)
+			if err != nil {
+				return err
+			}
+			defer stderr.Close()
+			cmd.Stderr = io.MultiWriter(os.Stderr, stderr)
+		} else {
+			cmd.Stderr = os.Stderr
+		}
 
-	// Wait for command to exit
-	if err := cmd.Wait(); err != nil {
-		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-			return context.DeadlineExceeded
+		// dedicated PID group used to forward signals to
+		// main process and all children
+		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+
+		if os.Getenv("TEKTON_RESOURCE_NAME") == "" && os.Getenv(pod.TektonHermeticEnvVar) == "1" {
+			dropNetworking(cmd)
 		}
-		return err
+
+		// Start defined command
+		if err := cmd.Start(); err != nil {
+			if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+				return context.DeadlineExceeded
+			}
+			return err
+		}
+
+		// Goroutine for signals forwarding
+		go func() {
+			for s := range rr.signals {
+				// Forward signal to main process and all children
+				if s != syscall.SIGCHLD {
+					_ = syscall.Kill(-cmd.Process.Pid, s.(syscall.Signal))
+				}
+			}
+		}()
+
+		// Wait for command to exit
+		if err := cmd.Wait(); err != nil {
+			if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+				return context.DeadlineExceeded
+			}
+			return err
+		}
 	}
 
 	return nil

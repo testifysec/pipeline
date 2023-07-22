@@ -1,3 +1,7 @@
+tmp
+cmd/entrypoint/entrypoint
+
+
 # MacOS file viewer garbage.
 .DS_Store
 
