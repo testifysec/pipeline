@@ -58,5 +58,5 @@ jobs:
             trace: true
             step: "build"
             attestations: "git github oci"
-            command: ko build ./cmd/entrypoint
+            command: ko build --tarball entrypoint.tar --sbom-dir . ./cmd/entrypoint
   
